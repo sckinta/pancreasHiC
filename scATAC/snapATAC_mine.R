@@ -971,3 +971,103 @@ sp.ge@cluster = factor(sp.ge@metaData$cellType)
 
 save(sp.ga, file=file.path(dir,"Rdata","spga_filtered2_clusterCelltype.Rdata"))
 save(sp.ge, file=file.path(dir,"Rdata","spge_filtered2_clusterCelltype.Rdata"))
+
+######################## add Pmat #######################
+#### using all cell peaks
+# read_peaks
+peaks.df = read_delim(
+        file.path(dir,"peaks2","pancreas_9cells.bed"), delim="\t",
+        col_names=c("chr","start","end","cells")
+) %>% 
+mutate(id=row_number()) # 200270 peaks
+
+peaks.gr = makeGRangesFromDataFrame(
+        peaks.df %>% select(-cells), 
+        keep.extra.columns=T,
+        starts.in.df.are.0based=T
+)
+
+#### add pmat
+load(file.path(dir,"Rdata","spga_filtered2_clusterCelltype.Rdata")) # sp.ga
+### create cell by peak matrix
+sp.ga@file=file.path(dir, "snaptools", basename(sp.ga@file))
+sp.ga = addPmatToSnap(sp.ga) # see commands_scATAC.sh to "add cell-by-peak matrix"
+sp.ga = makeBinary(sp.ga, mat="pmat")
+sp.ga # old Long's peak 323844, my peak is 200270
+save(sp.ga, file=file.path(dir,"Rdata","spga_filtered2_withallCellPmat.Rdata"))
+
+
+######################### gencode V19 annotation promoter to gmat #######################
+### TSS gr
+tss.df = read_delim(
+        "/mnt/isilon/sfgi/suc1/customerized_geneome_annotation/hg19/genecode_v19/gencode.v19.TSS.bed", 
+        col_names=c("chr","start","end","gene","dot","strand"),
+        delim="\t",
+        comment="#"
+) %>% 
+separate(gene,c("gene_name","transcript_id"), sep="\\+") %>% 
+dplyr::select(-dot) %>% 
+left_join(
+        read_delim(
+                "/mnt/isilon/sfgi/suc1/customerized_geneome_annotation/hg19/genecode_v19/gencode.v19.gene_type.txt", 
+                delim="\t",
+                comment="#"
+        )
+) %>% 
+filter(gene_type %in% c("protein_coding", "noncoding_RNA_long"))
+
+tss.gr = tss.df %>% 
+select(chr,start,end,transcript_id) %>% 
+makeGRangesFromDataFrame(
+        starts.in.df.are.0based=T,
+        keep.extra.columns=T
+)
+
+promoter.gr = read_delim(
+        "/mnt/isilon/sfgi/suc1/customerized_geneome_annotation/hg19/genecode_v19/gencode.v19.promoter.bed", 
+        col_names=c("chr","start","end","gene","dot","strand"),
+        delim="\t",
+        comment="#"
+) %>% 
+separate(gene,c("gene_name","transcript_id"), sep="\\+") %>% 
+dplyr::select(-dot) %>% 
+left_join(
+        read_delim(
+                "/mnt/isilon/sfgi/suc1/customerized_geneome_annotation/hg19/genecode_v19/gencode.v19.gene_type.txt", 
+                delim="\t",
+                comment="#"
+        )
+) %>% 
+filter(gene_type %in% c("protein_coding", "noncoding_RNA_long")) %>% 
+select(chr,start,end,name=gene_id,gene_name,strand) %>% 
+makeGRangesFromDataFrame(
+        starts.in.df.are.0based=T,
+        keep.extra.columns=T
+)
+
+promoter.reduced.gr = lapply(
+        unique(promoter.gr$name),
+        function(gene_id){
+                gr = reduce(promoter.gr[promoter.gr$name==gene_id,])
+                gr$name=gene_id
+                gr$gene_name=unique(promoter.gr[promoter.gr$name==gene_id,]$gene_name)
+                gr
+        }
+)
+
+promoter.reduced.gr = do.call("c", promoter.reduced.gr)
+
+save(tss.df, tss.gr, promoter.gr, promoter.reduced.gr, file=file.path(file.path(dir, "Rdata", "gencode.v19.proteinlncRNA.tssPromoter.Rdata")))
+
+##### add gmat
+load(file.path(dir,"Rdata","spga_filtered2_withallCellPmat.Rdata"))
+load(file.path(file.path(dir, "Rdata", "gencode.v19.proteinlncRNA.tssPromoter.Rdata")))
+sp.ga = createGmatFromMat(
+    obj=sp.ga, 
+    input.mat="bmat",
+    genes=promoter.reduced.gr,
+    do.par=TRUE,
+    num.cores=8
+)
+
+save(sp.ga, file=file.path(dir,"Rdata","spga_filtered2_withallCellPmat_withGenePromGmat.Rdata"))

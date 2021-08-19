@@ -5,30 +5,7 @@ library(SummarizedExperiment)
 
 dir="/mnt/isilon/sfgi/suc1/analyses/grant/scATAC/pancreaticCells"
 
-##########################  using all peaks ############################
-# read_peaks
-peaks.df = read_delim(
-        file.path(dir,"peaks2","pancreas_9cells.bed"), delim="\t",
-        col_names=c("chr","start","end","cells")
-) %>% 
-mutate(id=row_number()) # 200270 peaks
-
-peaks.gr = makeGRangesFromDataFrame(
-        peaks.df %>% select(-cells), 
-        keep.extra.columns=T,
-        starts.in.df.are.0based=T
-)
-
-#### add pmat
-load(file.path(dir,"Rdata","spga_filtered2_clusterCelltype.Rdata")) # sp.ga
-### create cell by peak matrix
-sp.ga@file=file.path(dir, "snaptools", basename(sp.ga@file))
-sp.ga = addPmatToSnap(sp.ga) # see commands_scATAC.sh to "add cell-by-peak matrix"
-sp.ga = makeBinary(sp.ga, mat="pmat")
-sp.ga # old Long's peak 323844, my peak is 200270
-save(sp.ga, file=file.path(dir,"Rdata","spga_filtered2_withallCellPmat.Rdata"))
-
-
+###################### using all cells ##############################
 #### fragment_counts SummarizedExperiment object for chromVAR
 load(file.path(dir,"Rdata","spga_filtered2_withallCellPmat.Rdata"))
 data = sp.ga@pmat
