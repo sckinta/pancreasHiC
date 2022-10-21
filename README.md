@@ -30,4 +30,8 @@
 
 ## integration
 
-- featureEnrichment
+- [featureEnrichment](integration/featureEnrichment_distChrMatch2.R)
+
+## shinyapp
+
+- [CHOP shiny webserver public](https://sfgishiny.research.chop.edu/V2GPancHic/)
